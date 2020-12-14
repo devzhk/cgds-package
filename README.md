@@ -60,7 +60,7 @@ for data in dataset:
 Please cite it if you find this code useful. 
 
 ```latex
-@misc{tianshou,
+@misc{cgds-package,
   author = {Hongkai Zheng},
   title = {CGDs},
   year = {2020},
