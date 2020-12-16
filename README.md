@@ -6,8 +6,9 @@ $$
 \min_{\mathbf{x}} \max_{\mathbf{y}} f(\mathbf{x}, \mathbf{y})
 $$
 
+**Warning**: This implementation is only for zero sum game setting because it relies on conjugate gradient method to solve matrix inversion efficiently, which requires the matrix to be positive definite. If you are using competitive gradient descent (CGD) algorithm for non-zero sum games, please check more details in CGD paper https://arxiv.org/abs/1905.12103. For example, GMRES (the generalized minimal residual) algorithm can be a solver for non-zero sum setting. 
 ## Installation 
-CGDs can be installed with the following pip command.
+CGDs can be installed with the following pip command. It requires Python 3.6+.
 ```bash
 pip3 install CGDs
 ```
@@ -52,7 +53,8 @@ for data in dataset:
     loss = loss_fn(real_output, fake_output)
     optimizer.step(loss=loss)
 ```
-
+## Changelog
+- version 0.0.2: adjust the stopping criterion of CG for better stability
 
 
 ## Citation
@@ -60,7 +62,7 @@ for data in dataset:
 Please cite it if you find this code useful. 
 
 ```latex
-@misc{tianshou,
+@misc{cgds-package,
   author = {Hongkai Zheng},
   title = {CGDs},
   year = {2020},

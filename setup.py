@@ -4,8 +4,8 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="CGDs-pkg",
-    version="0.0.1",
+    name="CGDs",
+    version="0.0.2",
     author="Hongkai Zheng",
     author_email="devzhk@gmail.com",
     description="A class of Pytorch optimizer",

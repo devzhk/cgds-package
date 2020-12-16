@@ -92,11 +92,14 @@ class ACGD(object):
 
         if self.state['solve_x']:
             p_y.mul_(lr_min.sqrt())
-            cg_y, iter_num = general_conjugate_gradient(grad_x=grad_y_vec, grad_y=grad_x_vec,
-                                                        x_params=self.min_params, y_params=self.max_params,
+            cg_y, iter_num = general_conjugate_gradient(grad_x=grad_y_vec,
+                                                        grad_y=grad_x_vec,
+                                                        x_params=self.min_params,
+                                                        y_params=self.max_params,
                                                         b=p_y, x=self.state['old_min'],
                                                         tol=tol, atol=atol,
-                                                        lr_x=lr_min, lr_y=lr_max, device=self.device)
+                                                        lr_x=lr_min, lr_y=lr_max,
+                                                        device=self.device)
             old_min = cg_y.detach_()
             min_update = cg_y.mul(- lr_min.sqrt())
             hcg = Hvp_vec(grad_y_vec, self.max_params, min_update).detach_()
@@ -105,11 +108,14 @@ class ACGD(object):
             old_max = hcg.mul(lr_max.sqrt())
         else:
             p_x.mul_(lr_max.sqrt())
-            cg_x, iter_num = general_conjugate_gradient(grad_x=grad_x_vec, grad_y=grad_y_vec,
-                                                        x_params=self.max_params, y_params=self.min_params,
+            cg_x, iter_num = general_conjugate_gradient(grad_x=grad_x_vec,
+                                                        grad_y=grad_y_vec,
+                                                        x_params=self.max_params,
+                                                        y_params=self.min_params,
                                                         b=p_x, x=self.state['old_max'],
                                                         tol=tol, atol=atol,
-                                                        lr_x=lr_max, lr_y=lr_min, device=self.device)
+                                                        lr_x=lr_max, lr_y=lr_min,
+                                                        device=self.device)
             old_max = cg_x.detach_()
             max_update = cg_x.mul(lr_max.sqrt())
             hcg = Hvp_vec(grad_x_vec, self.min_params, max_update).detach_()

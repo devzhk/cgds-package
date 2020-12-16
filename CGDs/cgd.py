@@ -113,20 +113,22 @@ class BCGD(object):
                 timer = time.time()
 
             if self.state['solve_x']:
-                cg_y, iter_num = conjugate_gradient(grad_x=grad_y_vec, grad_y=grad_x_vec,
+                cg_y, iter_num = conjugate_gradient(grad_x=grad_y_vec,
+                                                    grad_y=grad_x_vec,
                                                     x_params=self.min_params,
-                                                    y_params=self.max_params, b=p_y, x=self.state['old_min'],
-                                                    nsteps=p_y.shape[0],
+                                                    y_params=self.max_params,
+                                                    b=p_y, x=self.state['old_min'],
                                                     lr_x=lr_max, lr_y=lr_min,
                                                     tol=tol, atol=atol,
                                                     device=self.device)
                 hcg = Hvp_vec(grad_y_vec, self.max_params, cg_y.detach_()).detach_()
                 cg_x = torch.add(grad_x_vec_d, - lr_min * hcg)
             else:
-                cg_x, iter_num = conjugate_gradient(grad_x=grad_x_vec, grad_y=grad_y_vec,
+                cg_x, iter_num = conjugate_gradient(grad_x=grad_x_vec,
+                                                    grad_y=grad_y_vec,
                                                     x_params=self.max_params,
-                                                    y_params=self.min_params, b=p_x, x=self.state['old_max'],
-                                                    nsteps=p_x.shape[0],
+                                                    y_params=self.min_params,
+                                                    b=p_x, x=self.state['old_max'],
                                                     lr_x=lr_max, lr_y=lr_min,
                                                     tol=tol, atol=atol,
                                                     device=self.device)

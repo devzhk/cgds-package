@@ -1,0 +1,6 @@
+token.txt
+.idea
+dist
+build
+CGDs.egg-info
+CGDs_pkg.egg-info
