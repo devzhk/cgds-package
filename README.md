@@ -22,6 +22,8 @@ The `CGDs` package implements the following optimization algorithms with Pytorch
 - `ACGD` : ACGD algorithm in [Implicit competitive regularization in GANs](https://arxiv.org/abs/1910.05852). 
 
 ## How to use
+Quickstart with notebook: [Examples of using ACGD](https://colab.research.google.com/drive/1-52aReaBAPNBtq2NcHxKkVIbdVXdyqtH?usp=sharing). 
+
 Similar to Pytorch package `torch.optim`, using optimizers in `CGDs` has two main steps: construction and update steps. 
 ### Construction
 To construct an optimizer, you have to give it two iterables containing the parameters (all should be `Variable`s). 
