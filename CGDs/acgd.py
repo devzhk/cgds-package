@@ -70,8 +70,8 @@ class ACGD(object):
         sq_avg_y = self.state['sq_exp_avg_min']
         sq_avg_x = torch.zeros_like(grad_x_vec_d, requires_grad=False) if sq_avg_x is None else sq_avg_x
         sq_avg_y = torch.zeros_like(grad_y_vec_d, requires_grad=False) if sq_avg_y is None else sq_avg_y
-        sq_avg_x.mul_(beta).addcmul_(1 - beta, grad_x_vec_d, grad_x_vec_d)
-        sq_avg_y.mul_(beta).addcmul_(1 - beta, grad_y_vec_d, grad_y_vec_d)
+        sq_avg_x.mul_(beta).addcmul_(grad_x_vec_d, grad_x_vec_d, value=1-beta)
+        sq_avg_y.mul_(beta).addcmul_(grad_y_vec_d, grad_y_vec_d, value=1-beta)
 
         bias_correction = 1 - beta ** time_step
         lr_max = math.sqrt(bias_correction) * lr_max / sq_avg_x.sqrt().add(eps)
