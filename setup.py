@@ -5,14 +5,15 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="CGDs",
-    version="0.0.2",
+    version="0.0.3",
     author="Hongkai Zheng",
     author_email="devzhk@gmail.com",
-    description="A class of Pytorch optimizer",
+    description="Adaptive Competitive Gradient Descent optimizer",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/devzhk/cgds-package",
-    packages=setuptools.find_packages(),
+    package_dir={"": "CGDs"},
+    packages=setuptools.find_packages(where='CGDs'),
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
