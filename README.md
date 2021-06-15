@@ -31,7 +31,8 @@ Then you need to specify the `device`, `learning rate`s.
 
 Example:
 ```python
-import CGDs
+
+from src import CGDs
 import torch
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 optimizer = CGDs.ACGD(max_param=model_G.parameters(), min_params=model_D.parameters(), 
