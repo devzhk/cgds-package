@@ -3,6 +3,24 @@ import torch.autograd as autograd
 import warnings
 
 
+def vectorize_grad(params):
+    '''
+    Extract .grad field of parameters and concatenate them into a vector.
+    If grad is None, it is replace with zeros.
+    :param params: list of parameters
+    :return: vector
+    '''
+    grad_list = []
+    for p in params:
+        if p.grad is not None:
+            grad_list.append(p.grad.contiguous().view(-1))
+            del p.grad
+        else:
+            # replace None with zeros
+            grad_list.append(torch.zeros_like(p).view(-1))
+    return torch.cat(grad_list)
+
+
 def conjugate_gradient(grad_x, grad_y,
                        x_params, y_params,
                        b, x=None, nsteps=None,
@@ -63,7 +81,9 @@ def conjugate_gradient(grad_x, grad_y,
     return x, i + 1
 
 
-def Hvp_vec(grad_vec, params, vec, retain_graph=False):
+def Hvp_vec(grad_vec, params, vec,
+            backward=False,
+            retain_graph=False):
     '''
     Parameters:
         - grad_vec: Tensor of which the Hessian vector product will be computed
@@ -76,15 +96,23 @@ def Hvp_vec(grad_vec, params, vec, retain_graph=False):
     if torch.isnan(vec).any():
         raise ValueError('vector nan')
         # zero padding for None
-    grad_grad = autograd.grad(grad_vec, params, grad_outputs=vec, retain_graph=retain_graph,
-                              allow_unused=True)
-    grad_list = []
-    for i, p in enumerate(params):
-        if grad_grad[i] is None:
-            grad_list.append(torch.zeros_like(p).view(-1))
-        else:
-            grad_list.append(grad_grad[i].contiguous().view(-1))
-    hvp = torch.cat(grad_list)
+    if backward:
+        zero_grad(params)
+        autograd.backward(grad_vec, grad_tensors=vec,
+                          inputs=params,
+                          retain_graph=retain_graph)
+        hvp = vectorize_grad(params)
+    else:
+        grad_grad = autograd.grad(grad_vec, params, grad_outputs=vec,
+                                  retain_graph=retain_graph, create_graph=True,
+                                  allow_unused=True)
+        grad_list = []
+        for i, p in enumerate(params):
+            if grad_grad[i] is None:
+                grad_list.append(torch.zeros_like(p).view(-1))
+            else:
+                grad_list.append(grad_grad[i].contiguous().view(-1))
+        hvp = torch.cat(grad_list)
     if torch.isnan(hvp).any():
         raise ValueError('hvp Nan')
     return hvp
@@ -92,11 +120,13 @@ def Hvp_vec(grad_vec, params, vec, retain_graph=False):
 
 def general_conjugate_gradient(grad_x, grad_y,
                                x_params, y_params, b,
-                               lr_x, lr_y, x=None, nsteps=None,
+                               lr_x, lr_y,
+                               backward=False,
+                               x=None, nsteps=None,
                                tol=1e-10, atol=1e-16,
                                device=torch.device('cpu')):
     '''
-
+    Conjugate gradient algorithm for adaptive competitive gradient descent
     :param grad_x:
     :param grad_y:
     :param x_params:
@@ -119,26 +149,27 @@ def general_conjugate_gradient(grad_x, grad_y,
         r = b.clone()
     else:
         h1 = Hvp_vec(grad_vec=grad_x, params=y_params,
-                     vec=lr_x * x, retain_graph=True).mul_(lr_y)
+                     vec=lr_x * x, backward=backward, retain_graph=True).mul_(lr_y)
         h2 = Hvp_vec(grad_vec=grad_y, params=x_params,
-                     vec=h1, retain_graph=True).mul_(lr_x)
+                     vec=h1, backward=backward, retain_graph=True).mul_(lr_x)
         Avx = x + h2
         r = b.clone() - Avx
         nsteps -= 1
 
     if grad_x.shape != b.shape:
         raise RuntimeError('CG: hessian vector product shape mismatch')
+
     p = r.clone().detach()
     rdotr = torch.dot(r, r)
     residual_tol = tol * torch.dot(b, b)
+    # residual_tol = tol * rdotr
     if rdotr < residual_tol or rdotr < atol:
         return x, 1
     for i in range(nsteps):
-        # To compute Avp
         h_1 = Hvp_vec(grad_vec=grad_x, params=y_params,
-                      vec=lr_x * p, retain_graph=True).mul_(lr_y)
+                      vec=lr_x * p, backward=backward, retain_graph=True).mul_(lr_y)
         h_2 = Hvp_vec(grad_vec=grad_y, params=x_params,
-                      vec=h_1, retain_graph=True).mul_(lr_x)
+                      vec=h_1, backward=backward, retain_graph=True).mul_(lr_x)
 
         Avp_ = p + h_2
 

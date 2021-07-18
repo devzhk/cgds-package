@@ -3,4 +3,4 @@ token.txt
 dist
 build
 CGDs.egg-info
-CGDs_pkg.egg-info
+src/CGDs.egg-info
