@@ -6,6 +6,8 @@ $$
 \min_{\mathbf{x}} \max_{\mathbf{y}} f(\mathbf{x}, \mathbf{y})
 $$
 
+**Update**: ACGD now supports distributed training. Set `backward_mode=True` to enable. 
+
 **Warning**: This implementation is only for zero sum game setting because it relies on conjugate gradient method to solve matrix inversion efficiently, which requires the matrix to be positive definite. If you are using competitive gradient descent (CGD) algorithm for non-zero sum games, please check more details in CGD paper https://arxiv.org/abs/1905.12103. For example, GMRES (the generalized minimal residual) algorithm can be a solver for non-zero sum setting. 
 ## Installation 
 CGDs can be installed with the following pip command. It requires Python 3.6+.
