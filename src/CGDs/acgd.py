@@ -12,7 +12,6 @@ class ACGD(object):
                  backward_mode=False,
                  eps=1e-5, beta=0.99,
                  tol=1e-12, atol=1e-20,
-                 device=torch.device('cpu'),
                  solve_x=False, collect_info=False):
         self.backwardMode = backward_mode
         self.max_params = list(max_params)
@@ -27,7 +26,6 @@ class ACGD(object):
                      'hvp_x': None, 'hvp_y': None,
                      'cg_x': None, 'cg_y': None,
                      'time': 0, 'iter_num': 0}
-        self.device = device
         self.collect_info = collect_info
 
     def zero_grad(self):
@@ -102,8 +100,7 @@ class ACGD(object):
                                                         b=p_y, x=self.state['old_min'],
                                                         tol=tol, atol=atol,
                                                         lr_x=lr_min, lr_y=lr_max,
-                                                        backward=self.backwardMode,
-                                                        device=self.device)
+                                                        backward=self.backwardMode)
             old_min = cg_y.detach_()
             min_update = cg_y.mul(- lr_min.sqrt())
             hcg = Hvp_vec(grad_y_vec, self.max_params, min_update, self.backwardMode).detach_()
@@ -119,8 +116,7 @@ class ACGD(object):
                                                         b=p_x, x=self.state['old_max'],
                                                         tol=tol, atol=atol,
                                                         lr_x=lr_max, lr_y=lr_min,
-                                                        backward=self.backwardMode,
-                                                        device=self.device)
+                                                        backward=self.backwardMode)
             old_max = cg_x.detach_()
             max_update = cg_x.mul(lr_max.sqrt())
             hcg = Hvp_vec(grad_x_vec, self.min_params, max_update, self.backwardMode).detach_()

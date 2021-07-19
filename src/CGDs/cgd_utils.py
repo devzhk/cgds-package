@@ -44,7 +44,7 @@ def conjugate_gradient(grad_x, grad_y,
     if nsteps is None:
         nsteps = b.shape[0]
     if x is None:
-        x = torch.zeros(b.shape[0], device=device)
+        x = torch.zeros(b.shape[0], device=b.device)
         r = b.clone().detach()
     else:
         h1 = Hvp_vec(grad_vec=grad_x, params=y_params, vec=x, retain_graph=True).detach_().mul(lr_y)
@@ -123,8 +123,7 @@ def general_conjugate_gradient(grad_x, grad_y,
                                lr_x, lr_y,
                                backward=False,
                                x=None, nsteps=None,
-                               tol=1e-10, atol=1e-16,
-                               device=torch.device('cpu')):
+                               tol=1e-10, atol=1e-16):
     '''
     Conjugate gradient algorithm for adaptive competitive gradient descent
     :param grad_x:
@@ -145,7 +144,7 @@ def general_conjugate_gradient(grad_x, grad_y,
     if nsteps is None:
         nsteps = b.shape[0]
     if x is None:
-        x = torch.zeros(b.shape[0], device=device)
+        x = torch.zeros(b.shape[0], device=b.device)
         r = b.clone()
     else:
         h1 = Hvp_vec(grad_vec=grad_x, params=y_params,
