@@ -3,17 +3,22 @@ import math
 import torch
 import torch.autograd as autograd
 
-from .cgd_utils import zero_grad, general_conjugate_gradient, Hvp_vec, vectorize_grad
+from .distributed import reduce_mean
+
+from .cgd_utils import zero_grad, general_conjugate_gradient, Hvp_vec
 
 
 class ACGD(object):
     def __init__(self, max_params, min_params,
+                 max_reducer=None, min_reducer=None,
                  lr_max=1e-3, lr_min=1e-3,
                  backward_mode=False,
                  eps=1e-5, beta=0.99,
                  tol=1e-12, atol=1e-20,
                  solve_x=False, collect_info=False):
         self.backwardMode = backward_mode
+        self.max_reducer = max_reducer
+        self.min_reducer = min_reducer
         self.max_params = list(max_params)
         self.min_params = list(min_params)
         self.state = {'lr_max': lr_max, 'lr_min': lr_min,
@@ -49,7 +54,13 @@ class ACGD(object):
         print('Maximizing side learning rate: {:.4f}\n '
               'Minimizing side learning rate: {:.4f}'.format(lr_max, lr_min))
 
-    def step(self, loss):
+    def step(self, loss, trigger):
+        '''
+        Update model weights using ACGD
+        :param loss: objective function
+        :param trigger: scalar, dummy loss to trigger DDP gradient reduction w.r.t. minimizer model parameters
+        :return:
+        '''
         lr_max = self.state['lr_max']
         lr_min = self.state['lr_min']
         beta = self.state['beta']
@@ -58,12 +69,18 @@ class ACGD(object):
         atol = self.state['atol']
         time_step = self.state['step'] + 1
         self.state['step'] = time_step
+        should_rebuild = time_step < 2
 
-        loss.backward(create_graph=True)
-        grad_x_vec = vectorize_grad(self.max_params)
-        grad_y_vec = vectorize_grad(self.min_params)
+        grad_x = autograd.grad(loss, self.max_params, create_graph=True)
+        grad_x_vec = torch.cat([g.contiguous().view(-1) for g in grad_x])
+        grad_y = autograd.grad(loss, self.min_params, create_graph=True)
+        grad_y_vec = torch.cat([g.contiguous().view(-1) for g in grad_y])
+
         grad_x_vec_d = grad_x_vec.clone().detach()
         grad_y_vec_d = grad_y_vec.clone().detach()
+        # reduce leaf nodes across all devices
+        grad_x_vec_d = reduce_mean(grad_x_vec_d)
+        grad_y_vec_d = reduce_mean(grad_y_vec_d)
 
         sq_avg_x = self.state['sq_exp_avg_max']
         sq_avg_y = self.state['sq_exp_avg_min']
@@ -78,12 +95,17 @@ class ACGD(object):
 
         scaled_grad_x = torch.mul(lr_max, grad_x_vec_d)
         scaled_grad_y = torch.mul(lr_min, grad_y_vec_d)
+
         hvp_x_vec = Hvp_vec(grad_y_vec, self.max_params, scaled_grad_y,
                             backward=self.backwardMode,
-                            retain_graph=True)  # h_xy * d_y
+                            retain_graph=True,
+                            trigger=trigger,
+                            rebuild=should_rebuild)  # h_xy * d_y
         hvp_y_vec = Hvp_vec(grad_x_vec, self.min_params, scaled_grad_x,
                             backward=self.backwardMode,
-                            retain_graph=True)  # h_yx * d_x
+                            retain_graph=True,
+                            trigger=trigger,
+                            rebuild=should_rebuild)  # h_yx * d_x
         p_x = torch.add(grad_x_vec_d, - hvp_x_vec)
         p_y = torch.add(grad_y_vec_d, hvp_y_vec)
         if self.collect_info:
@@ -97,13 +119,20 @@ class ACGD(object):
                                                         grad_y=grad_x_vec,
                                                         x_params=self.min_params,
                                                         y_params=self.max_params,
+                                                        x_reducer=self.min_reducer,
+                                                        y_reducer=self.max_reducer,
+                                                        rebuild=should_rebuild,
+                                                        trigger=trigger,
                                                         b=p_y, x=self.state['old_min'],
                                                         tol=tol, atol=atol,
                                                         lr_x=lr_min, lr_y=lr_max,
                                                         backward=self.backwardMode)
             old_min = cg_y.detach_()
             min_update = cg_y.mul(- lr_min.sqrt())
-            hcg = Hvp_vec(grad_y_vec, self.max_params, min_update, self.backwardMode).detach_()
+            hcg = Hvp_vec(grad_y_vec, self.max_params, min_update,
+                          self.backwardMode,
+                          trigger=trigger, reducer=self.max_reducer,
+                          rebuild=should_rebuild).detach_()
             hcg.add_(grad_x_vec_d)
             max_update = hcg.mul(lr_max)
             old_max = hcg.mul(lr_max.sqrt())
@@ -113,13 +142,20 @@ class ACGD(object):
                                                         grad_y=grad_y_vec,
                                                         x_params=self.max_params,
                                                         y_params=self.min_params,
+                                                        x_reducer=self.max_reducer,
+                                                        y_reducer=self.min_reducer,
+                                                        rebuild=should_rebuild,
+                                                        trigger=trigger,
                                                         b=p_x, x=self.state['old_max'],
                                                         tol=tol, atol=atol,
                                                         lr_x=lr_max, lr_y=lr_min,
                                                         backward=self.backwardMode)
             old_max = cg_x.detach_()
             max_update = cg_x.mul(lr_max.sqrt())
-            hcg = Hvp_vec(grad_x_vec, self.min_params, max_update, self.backwardMode).detach_()
+            hcg = Hvp_vec(grad_x_vec, self.min_params, max_update,
+                          self.backwardMode,
+                          trigger=trigger, reducer=self.min_reducer,
+                          rebuild=should_rebuild).detach_()
             hcg.add_(grad_y_vec_d)
             min_update = hcg.mul(- lr_min)
             old_min = hcg.mul(lr_min.sqrt())
@@ -151,7 +187,3 @@ class ACGD(object):
             self.info.update({'grad_x': norm_gx, 'grad_y': norm_gy,
                               'cg_x': norm_cgx, 'cg_y': norm_cgy})
         self.state['solve_x'] = False if self.state['solve_x'] else True
-
-
-
-

@@ -36,7 +36,6 @@ def conjugate_gradient(grad_x, grad_y,
     :param nsteps: max number of steps
     :param residual_tol:
     :return: A ** -1 * b
-
     h_1 = D_yx * p
     h_2 = D_xy * D_yx * p
     A = I + lr_x * D_xy * lr_y * D_yx
@@ -83,12 +82,19 @@ def conjugate_gradient(grad_x, grad_y,
 
 def Hvp_vec(grad_vec, params, vec,
             backward=False,
-            retain_graph=False):
+            retain_graph=False,
+            trigger=None,
+            reducer=None,
+            rebuild=False):
     '''
     Parameters:
         - grad_vec: Tensor of which the Hessian vector product will be computed
         - params: list of params, w.r.t which the Hessian will be computed
         - vec: The "vector" in Hessian vector product
+        - retain_graph: keep the computation graph
+        - trigger: scalar that will be used to trigger gradient reduction. Only needed when using DDP.
+        - reducer: DDP reducer of the corresponding parameter
+        - rebuild: If True, check last backward is reduced and rebuild bucket
     return: Hessian vector product
     '''
     if torch.isnan(grad_vec).any():
@@ -98,7 +104,11 @@ def Hvp_vec(grad_vec, params, vec,
         # zero padding for None
     if backward:
         zero_grad(params)
-        autograd.backward(grad_vec, grad_tensors=vec,
+        if reducer is not None:
+            if rebuild:
+                reducer._rebuild_buckets()
+            reducer.prepare_for_backward([])
+        autograd.backward(grad_vec + 0.0 * trigger, grad_tensors=vec,
                           inputs=params,
                           retain_graph=retain_graph)
         hvp = vectorize_grad(params)
@@ -119,26 +129,36 @@ def Hvp_vec(grad_vec, params, vec,
 
 
 def general_conjugate_gradient(grad_x, grad_y,
-                               x_params, y_params, b,
+                               x_params, y_params,
+                               trigger,
+                               b,
                                lr_x, lr_y,
+                               x_reducer=None,
+                               y_reducer=None,
+                               rebuild=False,
                                backward=False,
                                x=None, nsteps=None,
                                tol=1e-10, atol=1e-16):
     '''
     Conjugate gradient algorithm for adaptive competitive gradient descent
-    :param grad_x:
-    :param grad_y:
-    :param x_params:
-    :param y_params:
-    :param b:
-    :param lr_x:
-    :param lr_y:
-    :param x:
-    :param nsteps:
-    :param residual_tol:
-    :param device:
+    :param grad_x: grad w.r.t. x_params
+    :param grad_y: grad w.r.t. y_params
+    :param x_params: list of x parameters
+    :param y_params: list of y parameters
+    :param trigger: scalar, dummy loss term to trigger DDP comm hook
+    :param b: the vector b in the linear system Ax=b
+    :param lr_x: learning rate vector for x parameters
+    :param lr_y: learning rate vector for y parameters
+    :param x_reducer: reducer manager for x DDP module
+    :param y_reducer: reducer manager for y DDP module
+    :param rebuild: boolean, if True rebuild parameters for DDP. Only need for the first iteration.
+    :param backward: True or False. If True, use backward to accumulate gradient.
+                    Required to be True if working with DDP.
+    :param x: initial guess of the solution
+    :param nsteps: the maximum step of the CG inner loop
+    :param tol: relative w.r.t. |b|^2 tolerance of the residual
+    :param atol: absolute tolerance of the residual
     :return: (I + sqrt(lr_x) * D_xy * lr_y * D_yx * sqrt(lr_x)) ** -1 * b
-
     '''
     lr_x = lr_x.sqrt()
     if nsteps is None:
@@ -148,9 +168,15 @@ def general_conjugate_gradient(grad_x, grad_y,
         r = b.clone()
     else:
         h1 = Hvp_vec(grad_vec=grad_x, params=y_params,
-                     vec=lr_x * x, backward=backward, retain_graph=True).mul_(lr_y)
+                     vec=lr_x * x, backward=backward,
+                     retain_graph=True,
+                     trigger=trigger, reducer=y_reducer,
+                     rebuild=rebuild).mul_(lr_y)
         h2 = Hvp_vec(grad_vec=grad_y, params=x_params,
-                     vec=h1, backward=backward, retain_graph=True).mul_(lr_x)
+                     vec=h1, backward=backward,
+                     retain_graph=True,
+                     trigger=trigger, reducer=x_reducer,
+                     rebuild=rebuild).mul_(lr_x)
         Avx = x + h2
         r = b.clone() - Avx
         nsteps -= 1
@@ -161,15 +187,19 @@ def general_conjugate_gradient(grad_x, grad_y,
     p = r.clone().detach()
     rdotr = torch.dot(r, r)
     residual_tol = tol * torch.dot(b, b)
-    # residual_tol = tol * rdotr
     if rdotr < residual_tol or rdotr < atol:
         return x, 1
     for i in range(nsteps):
         h_1 = Hvp_vec(grad_vec=grad_x, params=y_params,
-                      vec=lr_x * p, backward=backward, retain_graph=True).mul_(lr_y)
+                      vec=lr_x * p, backward=backward,
+                      retain_graph=True,
+                      trigger=trigger, reducer=y_reducer,
+                      rebuild=rebuild).mul_(lr_y)
         h_2 = Hvp_vec(grad_vec=grad_y, params=x_params,
-                      vec=h_1, backward=backward, retain_graph=True).mul_(lr_x)
-
+                      vec=h_1, backward=backward,
+                      retain_graph=True,
+                      trigger=trigger, reducer=x_reducer,
+                      rebuild=rebuild).mul_(lr_x)
         Avp_ = p + h_2
 
         alpha = rdotr / torch.dot(p, Avp_)
@@ -177,10 +207,10 @@ def general_conjugate_gradient(grad_x, grad_y,
         r.data.add_(- alpha * Avp_)
         new_rdotr = torch.dot(r, r)
         beta = new_rdotr / rdotr
-        p = r + beta * p
         rdotr = new_rdotr
         if rdotr < residual_tol or rdotr < atol:
             break
+        p = r + beta * p
     if i > 100:
         warnings.warn('CG iter num: %d' % (i + 1))
     return x, i + 1
@@ -191,4 +221,3 @@ def zero_grad(params):
         if p.grad is not None:
             p.grad.detach()
             p.grad.zero_()
-
