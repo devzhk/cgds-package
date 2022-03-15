@@ -1,14 +1,13 @@
 # CGDs
 ## Overview
-`CGDs` is a package implementing optimization algorithms including [CGD](https://arxiv.org/abs/1905.12103) and [ACGD](https://arxiv.org/abs/1910.05852)  in [Pytorch](https://pytorch.org/) with Hessian vector product and conjugate gradient.  
-`CGDs` is for minimax optimization problem such as generative adversarial networks (GANs) as follows: 
+`CGDs` is a package implementing optimization algorithms including three variants of [CGD](https://arxiv.org/abs/1905.12103)  in [Pytorch](https://pytorch.org/) with Hessian vector product and conjugate gradient.  
+`CGDs` is for competitive optimization problem such as generative adversarial networks (GANs) as follows: 
 $$
-\min_{\mathbf{x}} \max_{\mathbf{y}} f(\mathbf{x}, \mathbf{y})
+\min_{\mathbf{x}}f(\mathbf{x}, \mathbf{y}) \min_{\mathbf{y}} g(\mathbf{x}, \mathbf{y})
 $$
 
-**Update**: ACGD now supports distributed training. Set `backward_mode=True` to enable. 
+**Update**: ACGD now supports distributed training. Set `backward_mode=True` to enable. We have new member GMRES-ACGD that can work for general two-player competitive optimization problems.
 
-**Warning**: This implementation is only for zero sum game setting because it relies on conjugate gradient method to solve matrix inversion efficiently, which requires the matrix to be positive definite. If you are using competitive gradient descent (CGD) algorithm for non-zero sum games, please check more details in CGD paper https://arxiv.org/abs/1905.12103. For example, GMRES (the generalized minimal residual) algorithm can be a solver for non-zero sum setting. 
 ## Installation 
 CGDs can be installed with the following pip command. It requires Python 3.6+.
 ```bash
@@ -22,7 +21,7 @@ The `CGDs` package implements the following optimization algorithms with Pytorch
 
 - `BCGD` : CGD algorithm in [Competitive Gradient Descent](https://arxiv.org/abs/1905.12103).
 - `ACGD` : ACGD algorithm in [Implicit competitive regularization in GANs](https://arxiv.org/abs/1910.05852). 
-
+- `GACGD`: GMRES-ACGD that works for general 
 ## How to use
 Quickstart with notebook: [Examples of using ACGD](https://colab.research.google.com/drive/1-52aReaBAPNBtq2NcHxKkVIbdVXdyqtH?usp=sharing). 
 
@@ -58,9 +57,12 @@ for data in dataset:
     loss = loss_fn(real_output, fake_output)
     optimizer.step(loss=loss)
 ```
-## Changelog
-- version 0.0.2: adjust the stopping criterion of CG for better stability
-
+For general competitive optimization, two losses should be defined and passed to optimizer.step
+```python
+loss_x = loss_f(x, y)
+loss_y = loss_g(x, y)
+optimizer.step(loss_x, loss_y)
+```
 
 ## Citation
 
