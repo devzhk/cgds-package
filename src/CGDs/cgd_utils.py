@@ -221,3 +221,45 @@ def zero_grad(params):
         if p.grad is not None:
             p.grad.detach()
             p.grad.zero_()
+
+
+def MvProd(vec,  # vector
+           grad_fy,
+           grad_gx,
+           x_params,
+           y_params,
+           lr_x, lr_y,
+           trigger=None,
+           x_reducer=None,
+           y_reducer=None,
+           rebuild=False):
+    '''
+    Compute matrix vector product:
+    \begin{pmatrix}
+        I_m                                               & \eta_x \frac{\partial^2f}{\partial x \partial y}f \\
+        \eta_y \frac{\partial^2g}{\partial y \partial x}g & I_n
+    \end{pmatrix}
+    \begin{pmatrix}
+        b1 \\
+        b2
+    \end{pmatrix}
+
+    Return:
+        p1, p2
+        where p1 =
+    '''
+    len_x = lr_x.shape[0]
+    len_y = lr_y.shape[0]
+    v1 = vec[0: len_x]
+    v2 = vec[len_x: len_x + len_y]
+    h1 = Hvp_vec(grad_fy, x_params, v2,
+                 retain_graph=True, trigger=trigger,
+                 reducer=x_reducer,
+                 rebuild=rebuild)
+    p1 = v1 + lr_x * h1
+    h2 = Hvp_vec(grad_gx, y_params, v1,
+                 retain_graph=True, trigger=trigger,
+                 reducer=y_reducer,
+                 rebuild=rebuild)
+    p2 = v2 + lr_y * h2
+    return torch.cat([p1, p2])
