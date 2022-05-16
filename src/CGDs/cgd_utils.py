@@ -82,7 +82,7 @@ def conjugate_gradient(grad_x, grad_y,
 
 def Hvp_vec(grad_vec, params, vec,
             retain_graph=False,
-            trigger=None,
+            trigger=0.0,
             reducer=None,
             rebuild=False):
     '''

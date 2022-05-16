@@ -52,7 +52,7 @@ class ACGD(object):
         print('Maximizing side learning rate: {:.4f}\n '
               'Minimizing side learning rate: {:.4f}'.format(lr_max, lr_min))
 
-    def step(self, loss, trigger=None):
+    def step(self, loss, trigger=0.0):
         '''
         Update model weights using ACGD
         :param loss: objective function
