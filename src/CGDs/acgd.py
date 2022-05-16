@@ -12,11 +12,9 @@ class ACGD(object):
     def __init__(self, max_params, min_params,
                  max_reducer=None, min_reducer=None,
                  lr_max=1e-3, lr_min=1e-3,
-                 backward_mode=False,
                  eps=1e-5, beta=0.99,
                  tol=1e-12, atol=1e-20,
                  solve_x=False, collect_info=False):
-        self.backwardMode = backward_mode
         self.max_reducer = max_reducer
         self.min_reducer = min_reducer
         self.max_params = list(max_params)
@@ -97,12 +95,10 @@ class ACGD(object):
         scaled_grad_y = torch.mul(lr_min, grad_y_vec_d)
 
         hvp_x_vec = Hvp_vec(grad_y_vec, self.max_params, scaled_grad_y,
-                            backward=self.backwardMode,
                             retain_graph=True,
                             trigger=trigger,
                             rebuild=should_rebuild)  # h_xy * d_y
         hvp_y_vec = Hvp_vec(grad_x_vec, self.min_params, scaled_grad_x,
-                            backward=self.backwardMode,
                             retain_graph=True,
                             trigger=trigger,
                             rebuild=should_rebuild)  # h_yx * d_x
@@ -125,12 +121,10 @@ class ACGD(object):
                                                         trigger=trigger,
                                                         b=p_y, x=self.state['old_min'],
                                                         tol=tol, atol=atol,
-                                                        lr_x=lr_min, lr_y=lr_max,
-                                                        backward=self.backwardMode)
+                                                        lr_x=lr_min, lr_y=lr_max)
             old_min = cg_y.detach_()
             min_update = cg_y.mul(- lr_min.sqrt())
             hcg = Hvp_vec(grad_y_vec, self.max_params, min_update,
-                          self.backwardMode,
                           trigger=trigger, reducer=self.max_reducer,
                           rebuild=should_rebuild).detach_()
             hcg.add_(grad_x_vec_d)
@@ -148,12 +142,10 @@ class ACGD(object):
                                                         trigger=trigger,
                                                         b=p_x, x=self.state['old_max'],
                                                         tol=tol, atol=atol,
-                                                        lr_x=lr_max, lr_y=lr_min,
-                                                        backward=self.backwardMode)
+                                                        lr_x=lr_max, lr_y=lr_min)
             old_max = cg_x.detach_()
             max_update = cg_x.mul(lr_max.sqrt())
             hcg = Hvp_vec(grad_x_vec, self.min_params, max_update,
-                          self.backwardMode,
                           trigger=trigger, reducer=self.min_reducer,
                           rebuild=should_rebuild).detach_()
             hcg.add_(grad_y_vec_d)
@@ -167,17 +159,18 @@ class ACGD(object):
             self.info.update({'time': timer, 'iter_num': iter_num,
                               'hvp_x': norm_px, 'hvp_y': norm_py})
 
-        index = 0
-        for p in self.max_params:
-            p.data.add_(max_update[index: index + p.numel()].reshape(p.shape))
-            index += p.numel()
-        assert index == max_update.numel(), 'Maximizer CG size mismatch'
+        with torch.no_grad():
+            index = 0
+            for p in self.max_params:
+                p.data.add_(max_update[index: index + p.numel()].reshape(p.shape))
+                index += p.numel()
+            assert index == max_update.numel(), 'Maximizer CG size mismatch'
 
-        index = 0
-        for p in self.min_params:
-            p.data.add_(min_update[index: index + p.numel()].reshape(p.shape))
-            index += p.numel()
-        assert index == min_update.numel(), 'Minimizer CG size mismatch'
+            index = 0
+            for p in self.min_params:
+                p.data.add_(min_update[index: index + p.numel()].reshape(p.shape))
+                index += p.numel()
+            assert index == min_update.numel(), 'Minimizer CG size mismatch'
 
         if self.collect_info:
             norm_gx = torch.norm(grad_x_vec, p=2).item()

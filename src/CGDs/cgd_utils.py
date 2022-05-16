@@ -123,7 +123,6 @@ def general_conjugate_gradient(grad_x, grad_y,
                                x_reducer=None,
                                y_reducer=None,
                                rebuild=False,
-                               backward=False,
                                x=None, nsteps=None,
                                tol=1e-10, atol=1e-16):
     '''
@@ -155,12 +154,12 @@ def general_conjugate_gradient(grad_x, grad_y,
         r = b.clone()
     else:
         h1 = Hvp_vec(grad_vec=grad_x, params=y_params,
-                     vec=lr_x * x, backward=backward,
+                     vec=lr_x * x,
                      retain_graph=True,
                      trigger=trigger, reducer=y_reducer,
                      rebuild=rebuild).mul_(lr_y)
         h2 = Hvp_vec(grad_vec=grad_y, params=x_params,
-                     vec=h1, backward=backward,
+                     vec=h1,
                      retain_graph=True,
                      trigger=trigger, reducer=x_reducer,
                      rebuild=rebuild).mul_(lr_x)
@@ -178,12 +177,12 @@ def general_conjugate_gradient(grad_x, grad_y,
         return x, 1
     for i in range(nsteps):
         h_1 = Hvp_vec(grad_vec=grad_x, params=y_params,
-                      vec=lr_x * p, backward=backward,
+                      vec=lr_x * p,
                       retain_graph=True,
                       trigger=trigger, reducer=y_reducer,
                       rebuild=rebuild).mul_(lr_y)
         h_2 = Hvp_vec(grad_vec=grad_y, params=x_params,
-                      vec=h_1, backward=backward,
+                      vec=h_1,
                       retain_graph=True,
                       trigger=trigger, reducer=x_reducer,
                       rebuild=rebuild).mul_(lr_x)
