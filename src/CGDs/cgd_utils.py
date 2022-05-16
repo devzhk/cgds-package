@@ -81,7 +81,6 @@ def conjugate_gradient(grad_x, grad_y,
 
 
 def Hvp_vec(grad_vec, params, vec,
-            backward=False,
             retain_graph=False,
             trigger=None,
             reducer=None,
@@ -101,28 +100,16 @@ def Hvp_vec(grad_vec, params, vec,
         raise ValueError('Gradvec nan')
     if torch.isnan(vec).any():
         raise ValueError('vector nan')
-        # zero padding for None
-    if backward:
-        zero_grad(params)
-        if reducer is not None:
-            if rebuild:
-                reducer._rebuild_buckets()
-            reducer.prepare_for_backward([])
-        autograd.backward(grad_vec + 0.0 * trigger, grad_tensors=vec,
-                          inputs=params,
-                          retain_graph=retain_graph)
-        hvp = vectorize_grad(params)
-    else:
-        grad_grad = autograd.grad(grad_vec, params, grad_outputs=vec,
-                                  retain_graph=retain_graph, create_graph=True,
-                                  allow_unused=True)
-        grad_list = []
-        for i, p in enumerate(params):
-            if grad_grad[i] is None:
-                grad_list.append(torch.zeros_like(p).view(-1))
-            else:
-                grad_list.append(grad_grad[i].contiguous().view(-1))
-        hvp = torch.cat(grad_list)
+    zero_grad(params)
+    # rebuild comm buckets if needed, only effective when DDP is used
+    if reducer is not None:
+        if rebuild:
+            reducer._rebuild_buckets()
+        reducer.prepare_for_backward([])
+    autograd.backward(grad_vec + 0.0 * trigger, grad_tensors=vec,
+                      inputs=params,
+                      retain_graph=retain_graph)
+    hvp = vectorize_grad(params)
     if torch.isnan(hvp).any():
         raise ValueError('hvp Nan')
     return hvp
@@ -221,45 +208,3 @@ def zero_grad(params):
         if p.grad is not None:
             p.grad.detach()
             p.grad.zero_()
-
-
-def MvProd(vec,  # vector
-           grad_fy,
-           grad_gx,
-           x_params,
-           y_params,
-           lr_x, lr_y,
-           trigger=None,
-           x_reducer=None,
-           y_reducer=None,
-           rebuild=False):
-    '''
-    Compute matrix vector product:
-    \begin{pmatrix}
-        I_m                                               & \eta_x \frac{\partial^2f}{\partial x \partial y}f \\
-        \eta_y \frac{\partial^2g}{\partial y \partial x}g & I_n
-    \end{pmatrix}
-    \begin{pmatrix}
-        b1 \\
-        b2
-    \end{pmatrix}
-
-    Return:
-        p1, p2
-        where p1 =
-    '''
-    len_x = lr_x.shape[0]
-    len_y = lr_y.shape[0]
-    v1 = vec[0: len_x]
-    v2 = vec[len_x: len_x + len_y]
-    h1 = Hvp_vec(grad_fy, x_params, v2,
-                 retain_graph=True, trigger=trigger,
-                 reducer=x_reducer,
-                 rebuild=rebuild)
-    p1 = v1 + lr_x * h1
-    h2 = Hvp_vec(grad_gx, y_params, v1,
-                 retain_graph=True, trigger=trigger,
-                 reducer=y_reducer,
-                 rebuild=rebuild)
-    p2 = v2 + lr_y * h2
-    return torch.cat([p1, p2])

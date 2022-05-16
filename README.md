@@ -21,7 +21,7 @@ The `CGDs` package implements the following optimization algorithms with Pytorch
 
 - `BCGD` : CGD algorithm in [Competitive Gradient Descent](https://arxiv.org/abs/1905.12103).
 - `ACGD` : ACGD algorithm in [Implicit competitive regularization in GANs](https://arxiv.org/abs/1910.05852). 
-- `GACGD`: GMRES-ACGD that works for general 
+- `GACGD`: works for general-sum problem 
 ## How to use
 Quickstart with notebook: [Examples of using ACGD](https://colab.research.google.com/drive/1-52aReaBAPNBtq2NcHxKkVIbdVXdyqtH?usp=sharing). 
 
