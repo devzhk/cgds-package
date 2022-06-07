@@ -165,7 +165,6 @@ def general_conjugate_gradient(grad_x, grad_y,
                      rebuild=rebuild).mul_(lr_x)
         Avx = x + h2
         r = b.clone() - Avx
-        nsteps -= 1
 
     if grad_x.shape != b.shape:
         raise RuntimeError('CG: hessian vector product shape mismatch')
