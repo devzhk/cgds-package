@@ -6,10 +6,8 @@ $$
 \min_{\mathbf{x}}f(\mathbf{x}, \mathbf{y}) \min_{\mathbf{y}} g(\mathbf{x}, \mathbf{y})
 $$
 
-**Update**: ACGD now supports distributed training. Set `backward_mode=True` to enable. We have new member GMRES-ACGD that can work for general two-player competitive optimization problems.
 
 ## Installation 
-CGDs can be installed with the following pip command. It requires Python 3.6+.
 ```bash
 pip3 install CGDs
 ```
@@ -51,9 +49,9 @@ Example:
 ```python
 for data in dataset:
     optimizer.zero_grad()
-    real_output = model_D(data)
-   	latent = torch.randn((batch_size, latent_dim), device=device)
-    fake_output = D(G(latent))
+    real_pred = model_D(data)
+    latent = torch.randn((batch_size, latent_dim), device=device)
+    fake_pred = D(G(latent))
     loss = loss_fn(real_output, fake_output)
     optimizer.step(loss=loss)
 ```
@@ -62,6 +60,29 @@ For general competitive optimization, two losses should be defined and passed to
 loss_x = loss_f(x, y)
 loss_y = loss_g(x, y)
 optimizer.step(loss_x, loss_y)
+```
+## Use with Pytorch DistributedDataParallel
+
+For example, 
+```python
+G = DDP(G, device_ids=[rank], broadcast_buffers=False)
+D = DDP(D, device_ids=[rank], broadcast_buffers=False)
+g_reducer = G.reducer
+d_reducer = D.reducer
+
+optimizer = ACGD(max_params=G.parameters(), min_params=D.parameters(), 
+                 max_reducer=g_reducer, min_reducer=d_reducer, 
+                 lr_max=1e-3, lr_min=1e-3, 
+                 tol=1e-4, atol=1e-8)
+for data in dataloader:
+    real_pred = D(data)
+    latent = torch.randn((batchsize, latent_dim))
+    fake_img = G(latent)
+    fake_pred = D(fake_img)
+    # trigger is used to trigger the comm
+    trigger = real_pred[0, 0] + fake_img[0, 0, 0, 0]
+    loss = loss_fn(real_pred, fake_pred)
+    optimizer.step(loss, trigger=trigger.mean())
 ```
 
 ## Citation
